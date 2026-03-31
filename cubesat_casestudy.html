@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>🛰️ CubeSat Simulation – Sensors & Actuators Case Study</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Exo+2:ital,wght@0,300;0,400;0,600;1,300&family=Share+Tech+Mono&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg: #03060f;
+    --bg2: #060c1a;
+    --panel: rgba(0,200,255,0.04);
+    --border: rgba(0,200,255,0.18);
+    --border-bright: rgba(0,200,255,0.5);
+    --accent: #00c8ff;
+    --accent2: #7c3aed;
+    --accent3: #00ff9d;
+    --warn: #ff6b35;
+    --text: #cce8ff;
+    --text-dim: #7ab0cc;
+    --glow: 0 0 18px rgba(0,200,255,0.35);
+    --glow-green: 0 0 18px rgba(0,255,157,0.35);
+    --glow-purple: 0 0 18px rgba(124,58,237,0.45);
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Exo 2', sans-serif;
+    font-weight: 300;
+    overflow-x: hidden;
+  }
+
+  /* STARFIELD */
+  #stars {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background: transparent;
+  }
+
+  /* GRID OVERLAY */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0;
+    background-image:
+      linear-gradient(rgba(0,200,255,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,200,255,0.025) 1px, transparent 1px);
+    background-size: 60px 60px;
+    pointer-events: none;
+  }
+
+  /* SCANLINE */
+  body::after {
+    content: '';
+    position: fixed; inset: 0; z-index: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.06) 2px,
+      rgba(0,0,0,0.06) 4px
+    );
+    pointer-events: none;
+  }
+
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; position: relative; z-index: 1; }
+
+  /* ─── HERO ─── */
+  header {
+    position: relative; overflow: hidden;
+    padding: 80px 0 60px;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+  }
+  .hero-badge {
+    display: inline-block;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--accent3);
+    border: 1px solid var(--accent3);
+    padding: 4px 14px;
+    border-radius: 2px;
+    margin-bottom: 24px;
+    text-shadow: var(--glow-green);
+    box-shadow: var(--glow-green);
+    animation: pulse-green 2.5s ease-in-out infinite;
+  }
+  @keyframes pulse-green {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+  header h1 {
+    font-family: 'Orbitron', sans-serif;
+    font-size: clamp(28px, 5.5vw, 58px);
+    font-weight: 900;
+    line-height: 1.1;
+    letter-spacing: -1px;
+    background: linear-gradient(135deg, #00c8ff 0%, #7c3aed 50%, #00ff9d 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 18px;
+  }
+  header p.subtitle {
+    font-size: 17px;
+    color: var(--text-dim);
+    font-style: italic;
+    max-width: 600px;
+    margin: 0 auto 36px;
+    line-height: 1.7;
+  }
+
+  /* ORBIT ANIMATION */
+  .orbit-ring {
+    position: absolute;
+    border: 1px solid rgba(0,200,255,0.12);
+    border-radius: 50%;
+    top: 50%; left: 50%;
+    transform: translate(-50%,-50%);
+    animation: spin linear infinite;
+  }
+  .orbit-ring:nth-child(1) { width: 420px; height: 420px; animation-duration: 22s; }
+  .orbit-ring:nth-child(2) { width: 620px; height: 620px; animation-duration: 38s; animation-direction: reverse; border-color: rgba(124,58,237,0.10); }
+  .orbit-ring:nth-child(3) { width: 820px; height: 820px; animation-duration: 55s; border-color: rgba(0,255,157,0.07); }
+  @keyframes spin { to { transform: translate(-50%,-50%) rotate(360deg); } }
+
+  .sat-dot {
+    position: absolute;
+    width: 8px; height: 8px;
+    background: var(--accent);
+    border-radius: 50%;
+    box-shadow: 0 0 10px 3px var(--accent);
+    top: -4px; left: 50%;
+  }
+
+  /* ─── SECTION LAYOUT ─── */
+  section {
+    padding: 64px 0;
+    border-bottom: 1px solid var(--border);
+    animation: fadeUp 0.7s ease both;
+  }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(30px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .section-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 4px;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    opacity: 0.7;
+  }
+  .section-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: clamp(20px, 3vw, 30px);
+    font-weight: 800;
+    color: #fff;
+    margin-bottom: 28px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .section-title .num {
+    font-size: 13px;
+    color: var(--accent);
+    border: 1px solid var(--border-bright);
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-weight: 400;
+    font-family: 'Share Tech Mono', monospace;
+  }
+
+  /* ─── GLASS CARD ─── */
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 28px 30px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.3s, box-shadow 0.3s;
+  }
+  .card:hover {
+    border-color: var(--border-bright);
+    box-shadow: var(--glow);
+  }
+  .card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(0,200,255,0.04) 0%, transparent 60%);
+    pointer-events: none;
+  }
+  .card-accent-bar {
+    position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+  }
+
+  /* ─── SENSOR GRID ─── */
+  .sensor-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 22px;
+    margin-top: 12px;
+  }
+  .sensor-card {
+    background: rgba(0,0,0,0.4);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 26px 24px;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.3s, box-shadow 0.3s, border-color 0.3s;
+    cursor: default;
+  }
+  .sensor-card:hover {
+    transform: translateY(-4px) scale(1.01);
+    box-shadow: 0 8px 40px rgba(0,200,255,0.15);
+    border-color: var(--border-bright);
+  }
+  .sensor-card .top-stripe {
+    position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    border-radius: 10px 10px 0 0;
+  }
+  .stripe-blue   { background: linear-gradient(90deg, #00c8ff, #0066ff); }
+  .stripe-green  { background: linear-gradient(90deg, #00ff9d, #00c8ff); }
+  .stripe-orange { background: linear-gradient(90deg, #ff6b35, #ffd700); }
+  .sensor-card .icon-wrap {
+    width: 52px; height: 52px;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px;
+    margin-bottom: 16px;
+  }
+  .icon-blue   { background: rgba(0,200,255,0.12); box-shadow: 0 0 14px rgba(0,200,255,0.2); }
+  .icon-green  { background: rgba(0,255,157,0.10); box-shadow: 0 0 14px rgba(0,255,157,0.2); }
+  .icon-orange { background: rgba(255,107,53,0.12); box-shadow: 0 0 14px rgba(255,107,53,0.2); }
+  .sensor-card h3 {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 4px;
+  }
+  .sensor-card .sensor-sub {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--accent);
+    margin-bottom: 14px;
+    opacity: 0.7;
+  }
+  .sensor-card p { font-size: 14px; color: var(--text-dim); line-height: 1.6; margin-bottom: 14px; }
+  .tag-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .tag {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    padding: 3px 10px;
+    border-radius: 3px;
+    border: 1px solid;
+    letter-spacing: 1px;
+  }
+  .tag-blue   { border-color: rgba(0,200,255,0.4); color: var(--accent); background: rgba(0,200,255,0.06); }
+  .tag-green  { border-color: rgba(0,255,157,0.4); color: var(--accent3); background: rgba(0,255,157,0.06); }
+  .tag-orange { border-color: rgba(255,107,53,0.4); color: var(--warn); background: rgba(255,107,53,0.06); }
+
+  /* ─── LIVE METER ─── */
+  .meter-wrap { margin-top: 14px; }
+  .meter-label { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--text-dim); margin-bottom: 5px; letter-spacing: 1px; }
+  .meter-bar {
+    height: 4px; background: rgba(255,255,255,0.06);
+    border-radius: 2px; overflow: hidden;
+  }
+  .meter-fill {
+    height: 100%; border-radius: 2px;
+    animation: meter-anim 3s ease-in-out infinite alternate;
+  }
+  .fill-blue  { background: linear-gradient(90deg, #0066ff, #00c8ff); width: 70%; }
+  .fill-green { background: linear-gradient(90deg, #00ff9d, #00c8ff); width: 55%; animation-delay: 1s; }
+  .fill-orange{ background: linear-gradient(90deg, #ff6b35, #ffd700); width: 40%; animation-delay: 2s; }
+  @keyframes meter-anim {
+    from { opacity: 0.5; transform: scaleX(0.85); transform-origin: left; }
+    to   { opacity: 1;   transform: scaleX(1);    transform-origin: left; }
+  }
+
+  /* ─── ESP32 SECTION ─── */
+  .esp-visual {
+    display: flex; align-items: center; gap: 30px; flex-wrap: wrap;
+    margin-top: 20px;
+  }
+  .esp-chip {
+    position: relative;
+    width: 160px; height: 180px;
+    flex-shrink: 0;
+  }
+  .chip-body {
+    position: absolute; top: 30px; left: 30px; right: 30px; bottom: 30px;
+    background: linear-gradient(135deg, #1a1a2e, #16213e);
+    border: 2px solid rgba(0,200,255,0.3);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 1px;
+    box-shadow: 0 0 30px rgba(0,200,255,0.2);
+    animation: chip-pulse 2s ease-in-out infinite;
+  }
+  @keyframes chip-pulse {
+    0%, 100% { box-shadow: 0 0 30px rgba(0,200,255,0.2); }
+    50% { box-shadow: 0 0 50px rgba(0,200,255,0.4), inset 0 0 15px rgba(0,200,255,0.1); }
+  }
+  .pin {
+    position: absolute;
+    width: 12px; height: 4px;
+    background: #888;
+    border-radius: 1px;
+  }
+  .pins-left  { top: 50%; left: 14px; transform: translateY(-50%); }
+  .pins-right { top: 50%; right: 14px; transform: translateY(-50%); }
+  .esp-desc { flex: 1; min-width: 200px; }
+  .esp-desc p { font-size: 15px; color: var(--text); line-height: 1.7; margin-bottom: 10px; }
+  .func-list { list-style: none; }
+  .func-list li {
+    font-size: 14px; color: var(--text-dim);
+    padding: 7px 0 7px 22px;
+    position: relative;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  .func-list li::before {
+    content: '▶';
+    position: absolute; left: 0;
+    color: var(--accent); font-size: 8px;
+    top: 9px;
+  }
+
+  /* ─── FLOW DIAGRAM ─── */
+  .flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0;
+    margin: 32px 0;
+    overflow-x: auto;
+    padding: 10px 0;
+  }
+  .flow-step {
+    display: flex; flex-direction: column; align-items: center;
+    min-width: 110px;
+  }
+  .flow-box {
+    background: rgba(0,0,0,0.5);
+    border: 1px solid var(--border-bright);
+    border-radius: 8px;
+    padding: 14px 16px;
+    text-align: center;
+    position: relative;
+    transition: all 0.3s;
+    cursor: default;
+  }
+  .flow-box:hover { background: rgba(0,200,255,0.08); transform: translateY(-3px); }
+  .flow-box .emoji { font-size: 24px; display: block; margin-bottom: 6px; }
+  .flow-box .label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: var(--accent);
+    display: block;
+  }
+  .flow-arrow {
+    font-size: 22px; color: rgba(0,200,255,0.4);
+    padding: 0 4px;
+    animation: arrow-blink 1.5s ease-in-out infinite;
+  }
+  @keyframes arrow-blink {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 1; }
+  }
+  .flow-num {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    color: var(--accent2);
+    margin-top: 8px;
+  }
+
+  /* ─── ACTUATOR SECTION ─── */
+  .actuator-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 22px;
+    margin-top: 20px;
+  }
+  @media (max-width: 600px) { .actuator-grid { grid-template-columns: 1fr; } }
+  .act-card {
+    border-radius: 10px;
+    padding: 22px 24px;
+    border: 1px solid;
+  }
+  .act-real {
+    border-color: rgba(124,58,237,0.35);
+    background: rgba(124,58,237,0.06);
+  }
+  .act-virtual {
+    border-color: rgba(0,255,157,0.35);
+    background: rgba(0,255,157,0.04);
+  }
+  .act-card h4 {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 13px;
+    margin-bottom: 14px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .badge-real    { color: var(--accent2); }
+  .badge-virtual { color: var(--accent3); }
+  .act-card ul { list-style: none; }
+  .act-card ul li {
+    font-size: 13px; color: var(--text-dim);
+    padding: 5px 0 5px 18px;
+    position: relative;
+  }
+  .act-card ul li::before { content: '–'; position: absolute; left: 0; color: var(--text-dim); }
+
+  /* ─── SUMMARY TABLE ─── */
+  .summary-table {
+    width: 100%; border-collapse: collapse; margin-top: 20px;
+    font-size: 14px;
+  }
+  .summary-table thead tr {
+    background: rgba(0,200,255,0.08);
+    border-bottom: 2px solid var(--border-bright);
+  }
+  .summary-table th {
+    padding: 14px 18px;
+    text-align: left;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+  .summary-table tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.2s;
+  }
+  .summary-table tbody tr:hover { background: rgba(0,200,255,0.04); }
+  .summary-table td { padding: 13px 18px; color: var(--text-dim); }
+  .summary-table td:first-child {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .summary-table td:nth-child(2) { color: #fff; font-weight: 600; }
+
+  /* ─── REAL-WORLD RELEVANCE ─── */
+  .relevance-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 18px; margin-top: 20px;
+  }
+  .rel-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    background: rgba(0,0,0,0.3);
+    text-align: center;
+    transition: all 0.3s;
+  }
+  .rel-card:hover {
+    border-color: var(--accent2);
+    box-shadow: var(--glow-purple);
+    transform: translateY(-3px);
+  }
+  .rel-card .r-icon { font-size: 36px; margin-bottom: 10px; display: block; }
+  .rel-card h4 {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 12px;
+    color: #fff;
+    margin-bottom: 8px;
+    font-weight: 700;
+  }
+  .rel-card p { font-size: 12px; color: var(--text-dim); line-height: 1.5; }
+
+  /* ─── CLOSING QUOTE ─── */
+  .closing {
+    text-align: center;
+    padding: 80px 0 60px;
+  }
+  .quote-box {
+    max-width: 800px; margin: 0 auto;
+    border: 1px solid var(--accent2);
+    border-radius: 12px;
+    padding: 40px 48px;
+    background: rgba(124,58,237,0.06);
+    position: relative;
+    box-shadow: 0 0 40px rgba(124,58,237,0.15);
+  }
+  .quote-box::before, .quote-box::after {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 60px;
+    color: rgba(124,58,237,0.25);
+    position: absolute;
+    line-height: 1;
+  }
+  .quote-box::before { content: '"'; top: 10px; left: 24px; }
+  .quote-box::after  { content: '"'; bottom: -10px; right: 24px; }
+  .quote-box p {
+    font-family: 'Exo 2', sans-serif;
+    font-size: clamp(15px, 2vw, 19px);
+    font-style: italic;
+    font-weight: 600;
+    color: #fff;
+    line-height: 1.7;
+  }
+  .quote-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: var(--accent2);
+    margin-top: 20px;
+    opacity: 0.7;
+  }
+
+  /* FOOTER */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 24px 0;
+    text-align: center;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: rgba(255,255,255,0.2);
+    letter-spacing: 2px;
+  }
+
+  /* CALLOUT */
+  .callout {
+    background: rgba(0,200,255,0.05);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 6px 6px 0;
+    padding: 14px 18px;
+    margin: 20px 0;
+    font-size: 14px;
+    color: var(--text);
+    line-height: 1.7;
+  }
+  .callout strong {
+    font-family: 'Share Tech Mono', monospace;
+    color: var(--accent);
+  }
+
+  /* SCROLL REVEAL */
+  .reveal { opacity: 0; transform: translateY(24px); transition: opacity 0.6s ease, transform 0.6s ease; }
+  .reveal.visible { opacity: 1; transform: translateY(0); }
+</style>
+</head>
+<body>
+
+<canvas id="stars"></canvas>
+
+<!-- ──── HEADER ──── -->
+<header>
+  <div class="orbit-ring"><div class="sat-dot"></div></div>
+  <div class="orbit-ring"></div>
+  <div class="orbit-ring"></div>
+  <div class="container" style="position:relative;z-index:2;">
+    <div class="hero-badge">◉ MISSION LOG — CUBESAT SIMULATION</div>
+    <h1>Sensors & Actuators<br>in CubeSat Simulation</h1>
+    <p class="subtitle">A deep-dive case study into how miniature satellite systems sense orientation, monitor environment, and respond — digitally.</p>
+    <div style="display:flex;justify-content:center;gap:16px;flex-wrap:wrap;">
+      <span class="tag tag-blue" style="font-size:12px;padding:6px 14px;">ESP32</span>
+      <span class="tag tag-blue" style="font-size:12px;padding:6px 14px;">MPU6050</span>
+      <span class="tag tag-green" style="font-size:12px;padding:6px 14px;">BME280</span>
+      <span class="tag tag-orange" style="font-size:12px;padding:6px 14px;">LDR</span>
+      <span class="tag tag-blue" style="font-size:12px;padding:6px 14px;">WiFi Telemetry</span>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+
+  <!-- ──── SECTION 1 ──── -->
+  <section class="reveal">
+    <div class="section-label">Section 01</div>
+    <div class="section-title"><span class="num">01</span> What Does This Project Do?</div>
+    <div class="card">
+      <div class="card-accent-bar"></div>
+      <p style="font-size:15px;line-height:1.8;margin-bottom:18px;">
+        This project is a <strong style="color:var(--accent);">miniature CubeSat model</strong> that simulates how real satellites operate in orbit.
+        Real satellites must continuously detect their orientation, monitor surrounding conditions, and track sunlight for positioning.
+      </p>
+      <div class="callout">
+        <strong>📌 In Simple Terms:</strong>&nbsp; "We built a small system that behaves like a satellite — by sensing motion and environment using real hardware components."
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-top:20px;">
+        <div style="text-align:center;padding:18px;border:1px solid var(--border);border-radius:8px;">
+          <div style="font-size:30px;margin-bottom:8px;">🌍</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--accent);letter-spacing:1px;">ORIENTATION</div>
+          <div style="font-size:12px;color:var(--text-dim);margin-top:6px;">Detect direction in space</div>
+        </div>
+        <div style="text-align:center;padding:18px;border:1px solid var(--border);border-radius:8px;">
+          <div style="font-size:30px;margin-bottom:8px;">🌡️</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--accent3);letter-spacing:1px;">ENVIRONMENT</div>
+          <div style="font-size:12px;color:var(--text-dim);margin-top:6px;">Monitor surrounding conditions</div>
+        </div>
+        <div style="text-align:center;padding:18px;border:1px solid var(--border);border-radius:8px;">
+          <div style="font-size:30px;margin-bottom:8px;">☀️</div>
+          <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--warn);letter-spacing:1px;">SUNLIGHT</div>
+          <div style="font-size:12px;color:var(--text-dim);margin-top:6px;">Detect light for positioning</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ──── SECTION 2 — SENSORS ──── -->
+  <section class="reveal">
+    <div class="section-label">Section 02</div>
+    <div class="section-title"><span class="num">02</span> Role of Sensors</div>
+
+    <div class="sensor-grid">
+
+      <!-- MPU6050 -->
+      <div class="sensor-card">
+        <div class="top-stripe stripe-blue"></div>
+        <div class="icon-wrap icon-blue">🔷</div>
+        <h3>MPU6050</h3>
+        <div class="sensor-sub">IMU — INERTIAL MEASUREMENT UNIT</div>
+        <p>The primary motion sensor that measures both linear acceleration and rotational movement across 3 axes, giving us full orientation data.</p>
+        <div class="tag-list">
+          <span class="tag tag-blue">ROLL</span>
+          <span class="tag tag-blue">PITCH</span>
+          <span class="tag tag-blue">YAW</span>
+          <span class="tag tag-blue">GYROSCOPE</span>
+          <span class="tag tag-blue">ACCEL</span>
+        </div>
+        <div class="meter-wrap">
+          <div class="meter-label">ROLL AXIS ACTIVITY</div>
+          <div class="meter-bar"><div class="meter-fill fill-blue"></div></div>
+        </div>
+        <div class="callout" style="margin-top:14px;font-size:12px;">
+          <strong>Example:</strong> Cube stable → values constant. Tilted → pitch/roll changes. Rotated → yaw changes.
+        </div>
+      </div>
+
+      <!-- BME280 -->
+      <div class="sensor-card">
+        <div class="top-stripe stripe-green"></div>
+        <div class="icon-wrap icon-green">🌿</div>
+        <h3>BME280</h3>
+        <div class="sensor-sub">ENVIRONMENTAL SENSOR</div>
+        <p>Monitors surrounding environmental conditions, simulating onboard satellite telemetry for atmospheric data collection in orbit.</p>
+        <div class="tag-list">
+          <span class="tag tag-green">TEMPERATURE</span>
+          <span class="tag tag-green">PRESSURE</span>
+          <span class="tag tag-green">~25–30°C</span>
+          <span class="tag tag-green">~1000 hPa</span>
+        </div>
+        <div class="meter-wrap">
+          <div class="meter-label">TEMPERATURE READING</div>
+          <div class="meter-bar"><div class="meter-fill fill-green"></div></div>
+        </div>
+        <div class="callout" style="margin-top:14px;font-size:12px;">
+          <strong>Role:</strong> Simulates environmental monitoring like real satellites perform in orbit.
+        </div>
+      </div>
+
+      <!-- LDR -->
+      <div class="sensor-card">
+        <div class="top-stripe stripe-orange"></div>
+        <div class="icon-wrap icon-orange">☀️</div>
+        <h3>LDR</h3>
+        <div class="sensor-sub">LIGHT DEPENDENT RESISTOR</div>
+        <p>Detects ambient light intensity, functioning as a simplified sun sensor — a core component in real satellite attitude determination.</p>
+        <div class="tag-list">
+          <span class="tag tag-orange">LIGHT INTENSITY</span>
+          <span class="tag tag-orange">SUN SENSOR</span>
+          <span class="tag tag-orange">ANALOG</span>
+        </div>
+        <div class="meter-wrap">
+          <div class="meter-label">LIGHT LEVEL</div>
+          <div class="meter-bar"><div class="meter-fill fill-orange"></div></div>
+        </div>
+        <div class="callout" style="margin-top:14px;font-size:12px;">
+          <strong>Example:</strong> Dark environment → low value. Bright light → high value.
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ──── SECTION 3 — ESP32 ──── -->
+  <section class="reveal">
+    <div class="section-label">Section 03</div>
+    <div class="section-title"><span class="num">03</span> Role of ESP32 — The Brain</div>
+    <div class="card">
+      <div class="card-accent-bar" style="background:linear-gradient(90deg,var(--accent2),var(--accent));"></div>
+      <div class="esp-visual">
+        <div class="esp-chip">
+          <!-- pins left -->
+          <div style="position:absolute;left:14px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:6px;">
+            <div class="pin" style="background:#aaa;"></div>
+            <div class="pin" style="background:#aaa;"></div>
+            <div class="pin" style="background:#aaa;"></div>
+            <div class="pin" style="background:#aaa;"></div>
+            <div class="pin" style="background:#aaa;"></div>
+          </div>
+          <!-- pins right -->
+          <div style="position:absolute;right:14px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:6px;">
+            <div class="pin" style="background:#aaa;"></div>
+            <div class="pin" style="background:#aaa;"></div>
+            <div class="pin" style="background:#aaa;"></div>
+            <div class="pin" style="background:#aaa;"></div>
+            <div class="pin" style="background:#aaa;"></div>
+          </div>
+          <!-- pins top -->
+          <div style="position:absolute;top:14px;left:50%;transform:translateX(-50%);display:flex;gap:6px;">
+            <div class="pin" style="width:4px;height:12px;background:#aaa;"></div>
+            <div class="pin" style="width:4px;height:12px;background:#aaa;"></div>
+            <div class="pin" style="width:4px;height:12px;background:#aaa;"></div>
+          </div>
+          <div class="chip-body">ESP32</div>
+        </div>
+        <div class="esp-desc">
+          <p>The <strong style="color:var(--accent);">ESP32 microcontroller</strong> acts as the onboard computer — collecting sensor data, processing orientation calculations, and broadcasting telemetry over WiFi.</p>
+          <ul class="func-list">
+            <li>Collects data from all sensors via I²C / analog pins</li>
+            <li>Processes raw readings into usable metrics</li>
+            <li>Calculates Roll, Pitch, and Yaw angles</li>
+            <li>Transmits data to laptop via WiFi (TCP/UDP)</li>
+            <li>Controls the 3D visualization update loop</li>
+          </ul>
+          <div class="callout" style="margin-top:18px;">
+            <strong>📌 Simple Line:</strong>&nbsp; "ESP32 works like the onboard computer of a satellite."
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ──── SECTION 4 — ACTUATORS ──── -->
+  <section class="reveal">
+    <div class="section-label">Section 04</div>
+    <div class="section-title"><span class="num">04</span> Actuator Concept</div>
+    <p style="color:var(--text-dim);margin-bottom:20px;font-size:15px;">No physical actuator is used in this project. Instead, the 3D visualization serves as a <em style="color:var(--accent3);">virtual actuator</em> — showing system response digitally.</p>
+    <div class="actuator-grid">
+      <div class="act-card act-real">
+        <h4><span class="badge-real">⚙️ REAL SATELLITES</span> — Physical Actuators</h4>
+        <ul>
+          <li>Reaction Wheels → rotate satellite attitude</li>
+          <li>Thrusters → change orbital position</li>
+          <li>Magnetorquers → use Earth's magnetic field</li>
+          <li>Solar panel drives → track sun orientation</li>
+        </ul>
+      </div>
+      <div class="act-card act-virtual">
+        <h4><span class="badge-virtual">💻 THIS PROJECT</span> — Virtual Actuator</h4>
+        <ul>
+          <li>3D cube rotates on screen in real-time</li>
+          <li>Orientation data drives visual feedback</li>
+          <li>System response is fully digitalized</li>
+          <li>No moving parts — zero hardware cost</li>
+        </ul>
+      </div>
+    </div>
+    <div class="callout" style="margin-top:20px;">
+      <strong>📌 Smart Explanation:</strong>&nbsp; "The system response is visualized digitally instead of using physical actuators — achieving the same conceptual outcome."
+    </div>
+  </section>
+
+  <!-- ──── SECTION 5 — FLOW ──── -->
+  <section class="reveal">
+    <div class="section-label">Section 05</div>
+    <div class="section-title"><span class="num">05</span> Working of the System</div>
+    <div class="flow">
+      <div class="flow-step">
+        <div class="flow-box">
+          <span class="emoji">🛰️</span>
+          <span class="label">SENSORS</span>
+        </div>
+        <div class="flow-num">Step 1</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-box">
+          <span class="emoji">⚡</span>
+          <span class="label">ESP32 READ</span>
+        </div>
+        <div class="flow-num">Step 2</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-box">
+          <span class="emoji">🔢</span>
+          <span class="label">CALCULATE</span>
+        </div>
+        <div class="flow-num">Step 3</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-box">
+          <span class="emoji">📡</span>
+          <span class="label">WiFi SEND</span>
+        </div>
+        <div class="flow-num">Step 4</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-box">
+          <span class="emoji">🖥️</span>
+          <span class="label">3D DISPLAY</span>
+        </div>
+        <div class="flow-num">Step 5</div>
+      </div>
+    </div>
+    <div class="callout">
+      <strong>📌 Simple Flow:</strong>&nbsp; Physical movement → Sensor data → ESP32 Processing → WiFi Transmission → 3D Screen Output
+    </div>
+  </section>
+
+  <!-- ──── SECTION 6 — REAL-WORLD ──── -->
+  <section class="reveal">
+    <div class="section-label">Section 06</div>
+    <div class="section-title"><span class="num">06</span> Real-World Relevance</div>
+    <p style="color:var(--text-dim);margin-bottom:10px;font-size:15px;">This project replicates the same sensing concepts used in actual CubeSats deployed in low-Earth orbit.</p>
+    <div class="relevance-grid">
+      <div class="rel-card">
+        <span class="r-icon">🔵</span>
+        <h4>IMU → MPU6050</h4>
+        <p>Real satellites use IMU sensors for precise attitude determination and orbital maneuvering.</p>
+      </div>
+      <div class="rel-card">
+        <span class="r-icon">🌡️</span>
+        <h4>Env. Sensor → BME280</h4>
+        <p>Environmental monitoring units in real satellites track thermal conditions and atmospheric data.</p>
+      </div>
+      <div class="rel-card">
+        <span class="r-icon">🌞</span>
+        <h4>Sun Sensor → LDR</h4>
+        <p>Sun sensors are critical in real CubeSats for determining solar panel alignment and position.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ──── SECTION 7 — SUMMARY ──── -->
+  <section class="reveal">
+    <div class="section-label">Section 07</div>
+    <div class="section-title"><span class="num">07</span> Final Summary — Component Roles</div>
+    <div class="card">
+      <div class="card-accent-bar" style="background:linear-gradient(90deg,var(--accent3),var(--accent2),var(--accent));"></div>
+      <table class="summary-table">
+        <thead>
+          <tr>
+            <th>Component</th>
+            <th>Function</th>
+            <th>Real-World Analog</th>
+            <th>Output</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>MPU6050</td>
+            <td>Detects Motion</td>
+            <td>IMU in CubeSat</td>
+            <td>Roll / Pitch / Yaw</td>
+          </tr>
+          <tr>
+            <td>BME280</td>
+            <td>Measures Environment</td>
+            <td>Thermal Sensor</td>
+            <td>Temp / Pressure</td>
+          </tr>
+          <tr>
+            <td>LDR</td>
+            <td>Detects Light</td>
+            <td>Sun Sensor</td>
+            <td>Light Intensity Value</td>
+          </tr>
+          <tr>
+            <td>ESP32</td>
+            <td>Processes Everything</td>
+            <td>Onboard Computer</td>
+            <td>WiFi Data Stream</td>
+          </tr>
+          <tr>
+            <td>3D Cube (Screen)</td>
+            <td>Shows the Result</td>
+            <td>Virtual Actuator</td>
+            <td>Visual Orientation</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+</main>
+
+<!-- ──── CLOSING QUOTE ──── -->
+<div class="closing reveal container">
+  <div style="font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:4px;color:var(--accent);margin-bottom:24px;opacity:0.6;">🔥 VIVA CLOSING LINE</div>
+  <div class="quote-box">
+    <p>"This project demonstrates how a CubeSat senses its orientation and environment using multiple sensors, while system response is visualized digitally in place of physical actuators."</p>
+    <div class="quote-label">— CASE STUDY SUMMARY · CUBESAT SIMULATION PROJECT</div>
+  </div>
+</div>
+
+<footer>
+  <div class="container">
+    CUBESAT SIMULATION &nbsp;·&nbsp; SENSORS & ACTUATORS CASE STUDY &nbsp;·&nbsp; ESP32 + MPU6050 + BME280 + LDR
+  </div>
+</footer>
+
+<!-- ──── INLINE JS ──── -->
+<script>
+  // ── STARFIELD ──
+  const canvas = document.getElementById('stars');
+  const ctx = canvas.getContext('2d');
+  let stars = [];
+  const STAR_COUNT = 200;
+
+  function resize() {
+    canvas.width  = window.innerWidth;
+    canvas.height = document.body.scrollHeight;
+    generateStars();
+  }
+
+  function generateStars() {
+    stars = Array.from({ length: STAR_COUNT }, () => ({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      r: Math.random() * 1.4 + 0.2,
+      o: Math.random(),
+      s: (Math.random() * 0.8 + 0.2) * (Math.random() > 0.5 ? 1 : -1)
+    }));
+  }
+
+  function drawStars() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    stars.forEach(s => {
+      s.o += s.s * 0.004;
+      if (s.o > 1 || s.o < 0) s.s *= -1;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(180, 220, 255, ${Math.max(0, Math.min(1, s.o))})`;
+      ctx.fill();
+    });
+    requestAnimationFrame(drawStars);
+  }
+
+  window.addEventListener('resize', resize);
+  resize();
+  drawStars();
+
+  // ── SCROLL REVEAL ──
+  const reveals = document.querySelectorAll('.reveal');
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach((e, i) => {
+      if (e.isIntersecting) {
+        setTimeout(() => e.target.classList.add('visible'), i * 80);
+        observer.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.1 });
+  reveals.forEach(el => observer.observe(el));
+
+  // ── LIVE METER RANDOMIZER ──
+  setInterval(() => {
+    document.querySelectorAll('.meter-fill').forEach(el => {
+      const base = el.classList.contains('fill-blue')  ? 60 :
+                   el.classList.contains('fill-green') ? 45 : 35;
+      const val = base + Math.floor(Math.random() * 25);
+      el.style.width = val + '%';
+      el.style.transition = 'width 1s ease';
+    });
+  }, 2200);
+
+  // ── SATELLITE DOT TRAIL ──
+  document.querySelectorAll('.orbit-ring').forEach((ring, i) => {
+    const dot = document.createElement('div');
+    dot.style.cssText = `position:absolute;width:${6-i}px;height:${6-i}px;
+      background:${['#00c8ff','#7c3aed','#00ff9d'][i]};border-radius:50%;
+      box-shadow:0 0 8px 2px ${['#00c8ff','#7c3aed','#00ff9d'][i]};
+      top:${-3+i}px;left:50%;transform:translateX(-50%);`;
+    ring.appendChild(dot);
+  });
+</script>
+
+</body>
+</html>
